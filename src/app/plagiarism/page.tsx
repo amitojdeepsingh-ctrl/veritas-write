@@ -6,30 +6,42 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
+interface PlagiarismResult {
+  overall: number
+  sources: { url: string; title: string; similarity: number; matchedText?: string }[]
+  queriesRun?: number
+  error?: string
+}
+
 export default function PlagiarismPage() {
   const [text, setText] = useState("")
   const [scanning, setScanning] = useState(false)
-  const [results, setResults] = useState<{
-    overall: number
-    sources: { url: string; title: string; similarity: number }[]
-  } | null>(null)
+  const [results, setResults] = useState<PlagiarismResult | null>(null)
+  const [error, setError] = useState("")
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0
 
   const handleScan = async () => {
     if (!text.trim()) return
     setScanning(true)
+    setError("")
+    setResults(null)
 
-    await new Promise((r) => setTimeout(r, 2500))
-
-    setResults({
-      overall: Math.floor(Math.random() * 25) + 3,
-      sources: [
-        { url: "https://example.com/article-1", title: "Understanding Modern Economics", similarity: Math.floor(Math.random() * 15) + 2 },
-        { url: "https://example.org/research-paper", title: "Economic Trends in the 21st Century", similarity: Math.floor(Math.random() * 10) + 1 },
-        { url: "https://example.edu/thesis", title: "A Comprehensive Study of Market Dynamics", similarity: Math.floor(Math.random() * 8) + 1 },
-      ],
-    })
+    try {
+      const res = await fetch("/api/plagiarism", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Scan failed")
+      }
+      const data = await res.json()
+      setResults(data)
+    } catch (e) {
+      setError((e as Error).message)
+    }
     setScanning(false)
   }
 
@@ -43,7 +55,7 @@ export default function PlagiarismPage() {
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Plagiarism Check</h1>
-        <p className="text-muted-foreground">Scan your text against billions of sources to ensure originality.</p>
+        <p className="text-muted-foreground">Scan your text against web sources to ensure originality.</p>
       </div>
 
       <Card className="mb-6">
@@ -66,8 +78,9 @@ export default function PlagiarismPage() {
             disabled={!text.trim() || scanning}
             className="w-full sm:w-auto"
           >
-            {scanning ? "Scanning billions of sources..." : "Check Plagiarism"}
+            {scanning ? "Searching web sources..." : "Check Plagiarism"}
           </Button>
+          {error && <p className="text-sm text-red-500">{error}</p>}
         </CardContent>
       </Card>
 
@@ -89,6 +102,11 @@ export default function PlagiarismPage() {
                 >
                   {results.overall}% Match
                 </Badge>
+                {results.queriesRun != null && (
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {results.queriesRun} searches performed
+                  </span>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -112,24 +130,39 @@ export default function PlagiarismPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Matched Sources</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {results.sources.map((s, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <p className="font-medium text-sm">{s.title}</p>
-                    <p className="text-xs text-muted-foreground">{s.url}</p>
+          {results.sources.length > 0 ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Matched Sources</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {results.sources.map((s, i) => (
+                  <div key={i} className="py-2 border-b last:border-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-medium text-sm hover:underline truncate max-w-[70%]">
+                        {s.title}
+                      </a>
+                      <span className={`text-sm font-semibold ${getScoreColor(s.similarity)}`}>
+                        {s.similarity}%
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-1">{s.url}</p>
+                    {s.matchedText && (
+                      <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2 mt-1 line-clamp-2">
+                        {s.matchedText}
+                      </p>
+                    )}
                   </div>
-                  <span className={`text-sm font-semibold ${getScoreColor(s.similarity)}`}>
-                    {s.similarity}%
-                  </span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No matching sources found. Your text appears original.
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

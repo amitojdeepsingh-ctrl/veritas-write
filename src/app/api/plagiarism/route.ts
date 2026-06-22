@@ -1,34 +1,38 @@
 import { NextRequest, NextResponse } from "next/server"
+import { checkPlagiarism } from "@/lib/plagiarism"
+import { getAuthUser, checkWordLimit, consumeWords } from "@/lib/usage"
+
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
+  let text = ""
   try {
-    const { text } = await req.json()
-    if (!text || typeof text !== "string") {
-      return NextResponse.json({ error: "Text is required" }, { status: 400 })
+    const user = await getAuthUser()
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    await new Promise((r) => setTimeout(r, 1000))
+    const body = await req.json()
+    text = body.text
+    if (!text || typeof text !== "string" || text.trim().length < 20) {
+      return NextResponse.json({ error: "Text must be at least 20 characters" }, { status: 400 })
+    }
 
-    const overall = Math.floor(Math.random() * 25) + 3
+    const wordCount = text.trim().split(/\s+/).length
+    const limit = await checkWordLimit(user.id, wordCount)
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Word limit exceeded. Upgrade your plan." }, { status: 429 })
+    }
 
-    return NextResponse.json({
-      overall,
-      sources: [
-        {
-          url: "https://example.com/article-1",
-          title: "Matched academic source",
-          similarity: Math.floor(Math.random() * 15) + 1,
-          matchedText: text.slice(0, 80),
-        },
-        {
-          url: "https://example.org/research",
-          title: "Related publication",
-          similarity: Math.floor(Math.random() * 10) + 1,
-          matchedText: text.slice(20, 100),
-        },
-      ],
-    })
-  } catch {
-    return NextResponse.json({ error: "Plagiarism check failed" }, { status: 500 })
+    const result = await checkPlagiarism(text)
+    await consumeWords(user.id, wordCount)
+
+    return NextResponse.json(result)
+  } catch (err) {
+    console.error("Plagiarism check error:", err)
+    return NextResponse.json(
+      { overall: 0, sources: [], queriesRun: 0, error: "Search temporarily unavailable" },
+      { status: 200 }
+    )
   }
 }
