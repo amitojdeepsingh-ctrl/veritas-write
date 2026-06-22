@@ -1,0 +1,222 @@
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Slider } from "@/components/ui/slider"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { DetectionResult, HumanizeOptions } from "@/types"
+
+type Tab = "detect" | "humanize" | "results"
+
+export default function DashboardPage() {
+  const [text, setText] = useState("")
+  const [activeTab, setActiveTab] = useState<Tab>("detect")
+  const [detecting, setDetecting] = useState(false)
+  const [result, setResult] = useState<DetectionResult | null>(null)
+  const [humanizeOpts, setHumanizeOpts] = useState<HumanizeOptions>({
+    intensity: "moderate",
+    tone: "academic",
+  })
+  const [humanized, setHumanized] = useState("")
+
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0
+
+  const handleDetect = async () => {
+    if (!text.trim()) return
+    setDetecting(true)
+    setActiveTab("results")
+
+    // Simulate detection
+    await new Promise((r) => setTimeout(r, 1500))
+    setResult({
+      overall: { score: Math.floor(Math.random() * 40) + 50, verdict: "ai", confidence: 87 },
+      detectors: [
+        { name: "Turnitin", score: Math.floor(Math.random() * 30) + 40, verdict: "ai" },
+        { name: "GPTZero", score: Math.floor(Math.random() * 30) + 45, verdict: "ai" },
+        { name: "Originality", score: Math.floor(Math.random() * 25) + 35, verdict: "ai" },
+        { name: "Copyleaks", score: Math.floor(Math.random() * 30) + 30, verdict: "uncertain" },
+        { name: "Writer", score: Math.floor(Math.random() * 30) + 25, verdict: "uncertain" },
+        { name: "Sapling", score: Math.floor(Math.random() * 30) + 20, verdict: "human" },
+      ],
+      highlights: [],
+    })
+    setDetecting(false)
+  }
+
+  const handleHumanize = async () => {
+    if (!text.trim()) return
+    setActiveTab("results")
+
+    await new Promise((r) => setTimeout(r, 2000))
+    const prefix = humanizeOpts.tone === "academic" ? "This study examines" : humanizeOpts.tone === "conversational" ? "So here's the thing" : humanizeOpts.tone === "professional" ? "Our analysis indicates" : "Imagine walking into"
+    setHumanized(`${prefix} ${text.slice(0, 100)}... [humanized with ${humanizeOpts.intensity} intensity]`)
+  }
+
+  const getScoreColor = (score: number) => {
+    if (score < 30) return "text-emerald-500"
+    if (score < 60) return "text-amber-500"
+    return "text-red-500"
+  }
+
+  const getVerdictBadge = (verdict: string) => {
+    if (verdict === "human") return <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200">Human</Badge>
+    if (verdict === "ai") return <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200">AI</Badge>
+    return <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200">Uncertain</Badge>
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Writing Dashboard</h1>
+        <p className="text-muted-foreground">Paste your text below. We&apos;ll check it against every major detector.</p>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Your Text</CardTitle>
+                <span className="text-sm text-muted-foreground">{wordCount.toLocaleString()} words</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                placeholder="Paste your essay, article, or content here..."
+                className="min-h-[300px] resize-y text-sm leading-relaxed"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Humanization Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium">Intensity</span>
+                  <span className="text-muted-foreground capitalize">{humanizeOpts.intensity}</span>
+                </div>
+                <Slider
+                  value={[["minimal", "light", "moderate", "heavy", "max"].indexOf(humanizeOpts.intensity)]}
+                  onValueChange={(value) => {
+                    const v = Array.isArray(value) ? value[0] : value
+                    setHumanizeOpts({
+                      ...humanizeOpts,
+                      intensity: ["minimal", "light", "moderate", "heavy", "max"][v] as HumanizeOptions["intensity"],
+                    })
+                  }}
+                  max={4}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Minimal</span>
+                  <span>Light</span>
+                  <span>Moderate</span>
+                  <span>Heavy</span>
+                  <span>Max</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Tone</span>
+                <Select
+                  value={humanizeOpts.tone}
+                  onValueChange={(v) => setHumanizeOpts({ ...humanizeOpts, tone: v as HumanizeOptions["tone"] })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="academic">Academic</SelectItem>
+                    <SelectItem value="conversational">Conversational</SelectItem>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="narrative">Narrative</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={handleDetect}
+                disabled={!text.trim() || detecting}
+              >
+                {detecting ? "Scanning..." : "Run AI Detection"}
+              </Button>
+              <Button
+                className="w-full"
+                variant="secondary"
+                size="lg"
+                onClick={handleHumanize}
+                disabled={!text.trim()}
+              >
+                Humanize Text
+              </Button>
+              <Separator />
+              <a href="/plagiarism" className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted hover:text-foreground text-sm font-medium h-9 gap-1.5 px-2.5 w-full transition-all">Check Plagiarism</a>
+              <a href="/citations" className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted hover:text-foreground text-sm font-medium h-9 gap-1.5 px-2.5 w-full transition-all">Generate Citations</a>
+            </CardContent>
+          </Card>
+
+          {result && (
+            <Card className="border-emerald-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  Detection Results
+                  {result.overall.verdict === "ai" ? (
+                    <Badge className="bg-red-100 text-red-700 border-red-200">AI Detected</Badge>
+                  ) : (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Human Written</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {result.detectors.map((d) => (
+                  <div key={d.name} className="flex items-center justify-between py-1">
+                    <span className="text-sm font-medium">{d.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${getScoreColor(d.score)}`}>
+                        {d.score}%
+                      </span>
+                      {getVerdictBadge(d.verdict)}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {humanized && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Humanized Text</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{humanized}</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
