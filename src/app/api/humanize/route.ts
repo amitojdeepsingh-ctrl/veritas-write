@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { detectText, humanizeText } from "@/lib/ollama"
+import { getAuthUser, checkWordLimit, consumeWords } from "@/lib/usage"
 
 export async function POST(req: NextRequest) {
   let text = ""
   let tone = "academic"
   try {
+    const user = await getAuthUser()
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+    }
+
     const body = await req.json()
     text = body.text
     tone = body.tone ?? "academic"
@@ -13,10 +19,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Text must be at least 10 characters" }, { status: 400 })
     }
 
+    const wordCount = text.trim().split(/\s+/).length
+    const limit = await checkWordLimit(user.id, wordCount, wordCount)
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Word limit exceeded. Upgrade your plan." }, { status: 429 })
+    }
+
     const [originalResult, { rewritten, changes }] = await Promise.all([
       detectText(text),
       humanizeText(text, intensity, tone),
     ])
+
+    const outputWords = rewritten.trim().split(/\s+/).length
+    await consumeWords(user.id, wordCount, outputWords)
 
     return NextResponse.json({
       original: text,

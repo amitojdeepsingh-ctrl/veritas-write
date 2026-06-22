@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,47 +15,78 @@ import { DetectionResult, HumanizeOptions } from "@/types"
 type Tab = "detect" | "humanize" | "results"
 
 export default function DashboardPage() {
+  const { data: session } = useSession()
   const [text, setText] = useState("")
   const [activeTab, setActiveTab] = useState<Tab>("detect")
   const [detecting, setDetecting] = useState(false)
+  const [humanizing, setHumanizing] = useState(false)
   const [result, setResult] = useState<DetectionResult | null>(null)
   const [humanizeOpts, setHumanizeOpts] = useState<HumanizeOptions>({
     intensity: "moderate",
     tone: "academic",
   })
   const [humanized, setHumanized] = useState("")
+  const [error, setError] = useState("")
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0
+  const usage = session?.user
+    ? { used: session.user.wordsUsed, limit: session.user.wordsLimit }
+    : null
+  const usagePercent = usage && usage.limit > 0 ? Math.round((usage.used / usage.limit) * 100) : 0
 
   const handleDetect = async () => {
     if (!text.trim()) return
     setDetecting(true)
-    setActiveTab("results")
+    setError("")
 
-    // Simulate detection
-    await new Promise((r) => setTimeout(r, 1500))
-    setResult({
-      overall: { score: Math.floor(Math.random() * 40) + 50, verdict: "ai", confidence: 87 },
-      detectors: [
-        { name: "Turnitin", score: Math.floor(Math.random() * 30) + 40, verdict: "ai" },
-        { name: "GPTZero", score: Math.floor(Math.random() * 30) + 45, verdict: "ai" },
-        { name: "Originality", score: Math.floor(Math.random() * 25) + 35, verdict: "ai" },
-        { name: "Copyleaks", score: Math.floor(Math.random() * 30) + 30, verdict: "uncertain" },
-        { name: "Writer", score: Math.floor(Math.random() * 30) + 25, verdict: "uncertain" },
-        { name: "Sapling", score: Math.floor(Math.random() * 30) + 20, verdict: "human" },
-      ],
-      highlights: [],
-    })
+    try {
+      const res = await fetch("/api/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Detection failed")
+      }
+      const data = await res.json()
+      setResult(data)
+      setActiveTab("results")
+    } catch (e) {
+      setError((e as Error).message)
+    }
     setDetecting(false)
   }
 
   const handleHumanize = async () => {
     if (!text.trim()) return
-    setActiveTab("results")
+    setHumanizing(true)
+    setError("")
 
-    await new Promise((r) => setTimeout(r, 2000))
-    const prefix = humanizeOpts.tone === "academic" ? "This study examines" : humanizeOpts.tone === "conversational" ? "So here's the thing" : humanizeOpts.tone === "professional" ? "Our analysis indicates" : "Imagine walking into"
-    setHumanized(`${prefix} ${text.slice(0, 100)}... [humanized with ${humanizeOpts.intensity} intensity]`)
+    try {
+      const res = await fetch("/api/humanize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, intensity: humanizeOpts.intensity, tone: humanizeOpts.tone }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Humanization failed")
+      }
+      const data = await res.json()
+      setHumanized(data.rewritten)
+      if (data.metrics?.originalScore) {
+        setResult({
+          overall: { score: data.metrics.originalScore, verdict: "ai", confidence: data.metrics.originalScore },
+          detectors: [],
+          highlights: [],
+        })
+      }
+      setActiveTab("results")
+    } catch (e) {
+      setError((e as Error).message)
+    }
+    setHumanizing(false)
   }
 
   const getScoreColor = (score: number) => {
@@ -71,9 +103,19 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Writing Dashboard</h1>
-        <p className="text-muted-foreground">Paste your text below. We&apos;ll check it against every major detector.</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-1">Writing Dashboard</h1>
+          <p className="text-muted-foreground">Paste your text below to analyze and improve it.</p>
+        </div>
+        {usage && usage.limit > 0 && (
+          <div className="text-right">
+            <p className="text-sm font-medium">{usage.used.toLocaleString()} / {usage.limit.toLocaleString()} words used</p>
+            <div className="w-32 h-2 bg-muted rounded-full mt-1 ml-auto">
+              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(usagePercent, 100)}%` }} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -167,10 +209,11 @@ export default function DashboardPage() {
                 variant="secondary"
                 size="lg"
                 onClick={handleHumanize}
-                disabled={!text.trim()}
+                disabled={!text.trim() || humanizing}
               >
-                Humanize Text
+                {humanizing ? "Humanizing..." : "Humanize Text"}
               </Button>
+              {error && <p className="text-sm text-red-500">{error}</p>}
               <Separator />
               <a href="/plagiarism" className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted hover:text-foreground text-sm font-medium h-9 gap-1.5 px-2.5 w-full transition-all">Check Plagiarism</a>
               <a href="/citations" className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted hover:text-foreground text-sm font-medium h-9 gap-1.5 px-2.5 w-full transition-all">Generate Citations</a>
