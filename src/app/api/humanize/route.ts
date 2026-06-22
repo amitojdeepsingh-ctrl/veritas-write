@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { detectText, humanizeText } from "@/lib/ollama"
 
 export async function POST(req: NextRequest) {
+  let text = ""
+  let tone = "academic"
   try {
-    const { text, intensity = "moderate", tone = "academic" } = await req.json()
+    const body = await req.json()
+    text = body.text
+    tone = body.tone ?? "academic"
+    const intensity = body.intensity ?? "moderate"
     if (!text || typeof text !== "string" || text.trim().length < 10) {
       return NextResponse.json({ error: "Text must be at least 10 characters" }, { status: 400 })
     }
@@ -24,7 +29,6 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch {
-    // Fallback for Vercel (no Ollama)
     return NextResponse.json({
       original: text,
       rewritten: text.length > 50

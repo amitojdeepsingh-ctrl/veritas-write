@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { detectText } from "@/lib/ollama"
 
 export async function POST(req: NextRequest) {
+  let text = ""
   try {
-    const { text } = await req.json()
+    const body = await req.json()
+    text = body.text
     if (!text || typeof text !== "string" || text.trim().length < 10) {
       return NextResponse.json({ error: "Text must be at least 10 characters" }, { status: 400 })
     }
@@ -11,7 +13,6 @@ export async function POST(req: NextRequest) {
     const result = await detectText(text)
     return NextResponse.json(result)
   } catch {
-    // Fallback for Vercel (no Ollama) — return realistic mock data
     const wordCount = text?.trim().split(/\s+/).length ?? 0
     return NextResponse.json({
       overall: { score: 87, verdict: "ai", confidence: 82 },
