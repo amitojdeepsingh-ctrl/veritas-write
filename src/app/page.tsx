@@ -313,14 +313,12 @@ export default function Home() {
               </thead>
               <tbody className="divide-y">
                 {[
-                  ["Free words with full features", "5,000", "2,000 (detect only)", "0"],
-                  ["Per-detector scores", "Yes — 6 detectors", "Binary only", "Multi-detector"],
-                  ["Intensity levels", "5 levels", "1 mode", "Basic modes"],
-                  ["Tone presets", "4 presets", "None", "None"],
-                  ["API access", "Free tier included", "None", "Business only"],
-                  ["Citation generator", "Included", "None", "None"],
-                  ["Privacy (zero retention)", "Guaranteed", "Unclear", "Unclear"],
-                  ["Honest scoring", "Transparent", "Overstated", "Mixed"],
+                  ["Free words per month", "5,000", "2,000", "0"],
+                  ["Per-detector scores", "6 detectors", "Single score", "Multiple"],
+                  ["Detection intensity levels", "5 levels", "1 mode", "Basic"],
+                  ["Tone presets", "4 presets", "Not advertised", "Not advertised"],
+                  ["Citation generator", "Included", "Not included", "Not included"],
+                  ["Plagiarism checker", "Included", "Not included", "Not included"],
                 ].map(([feature, vw, lb, ua]) => (
                   <tr key={feature}>
                     <td className="py-3 pr-4">{feature}</td>
@@ -331,6 +329,9 @@ export default function Home() {
                 ))}
               </tbody>
             </table>
+            <p className="text-xs text-muted-foreground mt-4 text-center">
+              Competitor information based on publicly advertised features as of {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}. Check their sites for current pricing.
+            </p>
           </div>
         </div>
       </section>
