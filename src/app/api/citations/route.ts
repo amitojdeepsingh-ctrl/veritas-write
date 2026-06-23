@@ -1,35 +1,49 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getAuthUser } from "@/lib/usage"
+import { searchWorks, formatCitation, type CitationFormat, type Work, type WorkType } from "@/lib/citations"
+
+export const maxDuration = 30
+
+export async function GET(req: NextRequest) {
+  const user = await getAuthUser()
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(req.url)
+  const q = searchParams.get("q")
+  const type = (searchParams.get("type") ?? "all") as WorkType | "all"
+
+  if (!q || q.trim().length < 2) {
+    return NextResponse.json({ error: "Query must be at least 2 characters" }, { status: 400 })
+  }
+
+  try {
+    const works = await searchWorks(q.trim(), type)
+    return NextResponse.json({ works, query: q, count: works.length })
+  } catch {
+    return NextResponse.json({ error: "Search failed" }, { status: 500 })
+  }
+}
 
 export async function POST(req: NextRequest) {
+  const user = await getAuthUser()
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+  }
+
   try {
-    const { authors, title, publisher, year, format = "apa", type = "book" } = await req.json()
+    const { work, format = "apa" } = (await req.json()) as { work: Work; format: CitationFormat }
 
-    if (!authors || !title) {
-      return NextResponse.json({ error: "Authors and title are required" }, { status: 400 })
+    if (!work || !work.title) {
+      return NextResponse.json({ error: "Work with title is required" }, { status: 400 })
     }
 
-    const yr = year || "n.d."
-    let citation = ""
-
-    switch (format) {
-      case "apa":
-        citation = `${authors} (${yr}). *${title}*. ${publisher || "Publisher"}.`
-        break
-      case "mla":
-        citation = `${authors}. *${title}*. ${publisher || "Publisher"}, ${yr}.`
-        break
-      case "chicago":
-        citation = `${authors}. *${title}*. ${publisher || "Publisher"}, ${yr}.`
-        break
-      case "harvard":
-        citation = `${authors} (${yr}) *${title}*. ${publisher || "Publisher"}.`
-        break
-    }
-
+    const citation = formatCitation(work, format)
     return NextResponse.json({
       citation,
       format,
-      type,
+      type: work.type,
       generated: new Date().toISOString(),
     })
   } catch {
