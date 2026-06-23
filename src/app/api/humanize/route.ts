@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { detectText, humanizeText } from "@/lib/ollama"
 import { getAuthUser, checkWordLimit, consumeWords } from "@/lib/usage"
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
-  let text = ""
-  let tone = "academic"
   try {
     const user = await getAuthUser()
     if (!user) {
@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    text = body.text
-    tone = body.tone ?? "academic"
+    const text = body.text
+    const tone = body.tone ?? "academic"
     const intensity = body.intensity ?? "moderate"
     if (!text || typeof text !== "string" || text.trim().length < 10) {
       return NextResponse.json({ error: "Text must be at least 10 characters" }, { status: 400 })
@@ -43,18 +43,9 @@ export async function POST(req: NextRequest) {
         improvement: Math.round(originalResult.overall.score),
       },
     })
-  } catch {
-    return NextResponse.json({
-      original: text,
-      rewritten: text.length > 50
-        ? `${text.slice(0, text.length / 2)}... [humanized — connect Ollama locally for full inference]`
-        : text,
-      changes: [
-        { type: "vocabulary", description: "Replaced formal terms with natural alternatives" },
-        { type: "structure", description: "Varied sentence length and structure" },
-        { type: "formality", description: `Adjusted formality for ${tone} tone` },
-      ],
-      metrics: { originalScore: 85, rewrittenScore: 12, improvement: 73 },
-    })
+  } catch (err) {
+    console.error("Humanize error:", err)
+    const message = err instanceof Error ? err.message : "Unknown error"
+    return NextResponse.json({ error: `Humanization failed: ${message}` }, { status: 500 })
   }
 }

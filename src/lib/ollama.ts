@@ -1,27 +1,63 @@
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY
+const MISTRAL_MODEL = process.env.MISTRAL_MODEL || "mistral-small-latest"
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434"
-const MODEL = process.env.OLLAMA_MODEL || "mistral"
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral"
 
-interface OllamaGenerateOpts {
+const useMistralAPI = !!MISTRAL_API_KEY
+
+interface GenerateOpts {
   prompt: string
   system?: string
   temperature?: number
   maxTokens?: number
-  format?: "json"
 }
 
-export async function generate(opts: OllamaGenerateOpts) {
+async function generate(opts: GenerateOpts): Promise<string> {
+  if (useMistralAPI) {
+    return generateMistral(opts)
+  }
+  return generateOllama(opts)
+}
+
+async function generateMistral(opts: GenerateOpts): Promise<string> {
+  const messages = []
+  if (opts.system) {
+    messages.push({ role: "system", content: opts.system })
+  }
+  messages.push({ role: "user", content: opts.prompt })
+
+  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MISTRAL_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MISTRAL_MODEL,
+      messages,
+      temperature: opts.temperature ?? 0.1,
+      max_tokens: opts.maxTokens ?? 2048,
+    }),
+  })
+
+  if (!res.ok) {
+    throw new Error(`Mistral API error: ${res.status} ${await res.text()}`)
+  }
+
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content?.trim() ?? ""
+}
+
+async function generateOllama(opts: GenerateOpts): Promise<string> {
   const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
+      model: OLLAMA_MODEL,
       prompt: opts.prompt,
       system: opts.system,
       temperature: opts.temperature ?? 0.1,
-      options: {
-        num_predict: opts.maxTokens ?? 2048,
-      },
-      format: opts.format,
+      options: { num_predict: opts.maxTokens ?? 2048 },
       stream: false,
     }),
   })
@@ -34,28 +70,40 @@ export async function generate(opts: OllamaGenerateOpts) {
   return data.response.trim()
 }
 
-export async function generateJSON<T>(opts: OllamaGenerateOpts): Promise<T> {
-  const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      prompt: opts.prompt,
-      system: opts.system,
-      temperature: opts.temperature ?? 0.05,
-      options: {
-        num_predict: opts.maxTokens ?? 2048,
+async function generateJSON<T>(opts: GenerateOpts): Promise<T> {
+  let raw: string
+
+  if (useMistralAPI) {
+    const messages = []
+    if (opts.system) {
+      messages.push({ role: "system", content: opts.system })
+    }
+    messages.push({ role: "user", content: opts.prompt })
+
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MISTRAL_API_KEY}`,
       },
-      stream: false,
-    }),
-  })
+      body: JSON.stringify({
+        model: MISTRAL_MODEL,
+        messages,
+        temperature: opts.temperature ?? 0.05,
+        max_tokens: opts.maxTokens ?? 2048,
+        response_format: { type: "json_object" },
+      }),
+    })
 
-  if (!res.ok) {
-    throw new Error(`Ollama error: ${res.status} ${await res.text()}`)
+    if (!res.ok) {
+      throw new Error(`Mistral API error: ${res.status} ${await res.text()}`)
+    }
+
+    const data = await res.json()
+    raw = data.choices?.[0]?.message?.content?.trim() ?? ""
+  } else {
+    raw = await generateOllama(opts)
   }
-
-  const data = await res.json()
-  const raw = data.response.trim()
 
   const jsonStr = raw
     .replace(/^```(?:json)?\s*/i, "")
@@ -75,29 +123,48 @@ export async function detectText(text: string) {
     detectors?: { name?: string; score?: number; verdict?: string }[]
     highlights?: { start?: number; end?: number; probability?: number; text?: string }[]
   }>({
-    prompt: `Analyze this text for AI patterns. Return JSON with overall.score/verdict/confidence, detectors array (names: Turnitin, GPTZero, Originality, Copyleaks, Writer, Sapling each with score and verdict), and highlights array with start/end/probability/text.
+    prompt: `Analyze this text for AI patterns. Return JSON with:
+- overall: { score (integer 0-100 where higher = more AI-like), verdict ("ai"|"human"|"uncertain"), confidence (integer 0-100) }
+- detectors: array of { name, score (integer 0-100), verdict ("ai"|"human"|"uncertain") } for each of: Turnitin, GPTZero, Originality, Copyleaks, Writer, Sapling
+- highlights: array of { start (character offset), end (character offset), probability (integer 0-100), text (the matched substring) }
+
+IMPORTANT: All scores must be integers between 0 and 100, NOT decimals.
 
 Text: """${text.slice(0, 3000)}"""`,
     temperature: 0.05,
     maxTokens: 1500,
   })
 
+  const normalizeScore = (s: number | undefined): number => {
+    const val = s ?? 50
+    if (val <= 1) return Math.round(val * 100)
+    return Math.round(val)
+  }
+
+  const normalizeVerdict = (v: string | undefined): "ai" | "human" | "uncertain" => {
+    if (!v) return "uncertain"
+    const lower = v.toLowerCase()
+    if (lower.includes("ai") || lower.includes("likely")) return "ai"
+    if (lower.includes("human")) return "human"
+    return "uncertain"
+  }
+
   const overall = {
-    score: raw.overall?.score ?? 50,
-    verdict: raw.overall?.verdict ?? "uncertain",
-    confidence: raw.overall?.confidence ?? 50,
+    score: normalizeScore(raw.overall?.score),
+    verdict: normalizeVerdict(raw.overall?.verdict),
+    confidence: normalizeScore(raw.overall?.confidence),
   }
 
   const detectors = (raw.detectors ?? []).map((d) => ({
     name: d.name ?? "Unknown",
-    score: d.score ?? 50,
-    verdict: d.verdict ?? "uncertain",
+    score: normalizeScore(d.score),
+    verdict: normalizeVerdict(d.verdict),
   }))
 
   const highlights = (raw.highlights ?? []).map((h) => ({
     start: h.start ?? 0,
     end: h.end ?? 0,
-    probability: h.probability ?? 50,
+    probability: normalizeScore(h.probability),
     text: h.text ?? "",
   }))
 

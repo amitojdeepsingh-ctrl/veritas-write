@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { detectText } from "@/lib/ollama"
 import { getAuthUser, checkWordLimit, consumeWords } from "@/lib/usage"
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
-  let text = ""
   try {
     const user = await getAuthUser()
     if (!user) {
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    text = body.text
+    const text = body.text
     if (!text || typeof text !== "string" || text.trim().length < 10) {
       return NextResponse.json({ error: "Text must be at least 10 characters" }, { status: 400 })
     }
@@ -26,21 +27,9 @@ export async function POST(req: NextRequest) {
     await consumeWords(user.id, wordCount)
 
     return NextResponse.json(result)
-  } catch {
-    const wordCount = text?.trim().split(/\s+/).length ?? 0
-    return NextResponse.json({
-      overall: { score: 87, verdict: "ai", confidence: 82 },
-      detectors: [
-        { name: "Turnitin", score: 92, verdict: "ai" },
-        { name: "GPTZero", score: 89, verdict: "ai" },
-        { name: "Originality", score: 78, verdict: "ai" },
-        { name: "Copyleaks", score: 85, verdict: "ai" },
-        { name: "Writer", score: 73, verdict: "ai" },
-        { name: "Sapling", score: 65, verdict: "uncertain" },
-      ],
-      highlights: wordCount > 10
-        ? [{ start: 0, end: Math.min(80, text.length - 1), probability: 85, text: text.slice(0, Math.min(80, text.length)) }]
-        : [],
-    })
+  } catch (err) {
+    console.error("Detection error:", err)
+    const message = err instanceof Error ? err.message : "Unknown error"
+    return NextResponse.json({ error: `Detection failed: ${message}` }, { status: 500 })
   }
 }
