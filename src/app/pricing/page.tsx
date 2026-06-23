@@ -1,10 +1,26 @@
-import Link from "next/link"
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { plans } from "@/lib/pricing"
 
 export default function PricingPage() {
+  const [ctaMsg, setCtaMsg] = useState<string | null>(null)
+
+  const router = useRouter()
+
+  const handleUpgrade = (planName: string) => {
+    if (planName === "Free") {
+      router.push("/dashboard")
+      return
+    }
+    setCtaMsg(`${planName} plan — coming soon! You can use all features on the free tier for now.`)
+    setTimeout(() => setCtaMsg(null), 4000)
+  }
+
   return (
     <div className="container mx-auto px-4 py-12 max-w-6xl">
       <div className="text-center mb-12">
@@ -14,6 +30,12 @@ export default function PricingPage() {
           Upgrade only when you need more.
         </p>
       </div>
+
+      {ctaMsg && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg text-sm text-center max-w-md">
+          {ctaMsg}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plans.map((plan) => (
@@ -77,16 +99,16 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href={plan.name === "Enterprise" ? "mailto:sales@veritaswrite.com" : "/dashboard"}
-                className={`inline-flex shrink-0 items-center justify-center rounded-lg text-base font-medium w-full mt-auto h-10 gap-1.5 px-8 transition-all ${
+              <Button
+                onClick={() => handleUpgrade(plan.name)}
+                className={`w-full mt-auto ${
                   plan.highlighted
                     ? "bg-primary text-primary-foreground hover:bg-primary/80"
                     : "border border-border bg-background hover:bg-muted hover:text-foreground"
                 }`}
               >
                 {plan.cta}
-              </Link>
+              </Button>
             </CardContent>
           </Card>
         ))}
@@ -109,11 +131,11 @@ export default function PricingPage() {
             <tbody className="divide-y">
               {[
                 ["AI Detection (per-detector)", "6 detectors", "6 detectors", "6 detectors", "6 detectors"],
-                ["Humanization levels", "3 levels", "5 levels + 4 tones", "5 levels + 4 tones", "Custom model"],
+                ["Humanization levels", "5 levels + 4 tones", "5 levels + 4 tones", "5 levels + 4 tones", "Custom model"],
                 ["Words per month", "5,000", "50,000", "500,000", "Unlimited"],
-                ["API access", "No", "1K req/day", "Unlimited", "Unlimited"],
-                ["Plagiarism check", "Basic", "Advanced", "Advanced", "Full"],
-                ["Citation generator", "2 formats", "All 4 formats", "All 4 formats", "All 4 formats"],
+                ["API access", "—", "1K req/day", "Unlimited", "Unlimited"],
+                ["Plagiarism check", "Included", "Included", "Included", "Included"],
+                ["Citation generator", "All 4 formats", "All 4 formats", "All 4 formats", "All 4 formats"],
                 ["Team workspace", "—", "—", "Included", "Included"],
                 ["Brand voice presets", "—", "—", "Included", "Custom trained"],
                 ["Private deployment", "—", "—", "—", "Included"],
