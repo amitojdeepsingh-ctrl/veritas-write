@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/usage"
 import { searchWorks, formatCitation, type CitationFormat, type Work, type WorkType } from "@/lib/citations"
 
 export const maxDuration = 30
 
 export async function GET(req: NextRequest) {
-  const user = await getAuthUser()
-  if (!user) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-  }
-
   const { searchParams } = new URL(req.url)
   const q = searchParams.get("q")
   const type = (searchParams.get("type") ?? "all") as WorkType | "all"
@@ -27,11 +21,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getAuthUser()
-  if (!user) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-  }
-
   try {
     const { work, format = "apa" } = (await req.json()) as { work: Work; format: CitationFormat }
 
